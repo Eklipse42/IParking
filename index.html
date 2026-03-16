@@ -1,9 +1,15 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <title>IParking Búnker v8</title>
+    <title>IParking</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    
+    <link rel="icon" type="image/png" href="https://img.icons8.com/neon/96/experimental-car-neon.png">
+    <link rel="apple-touch-icon" href="https://img.icons8.com/neon/180/experimental-car-neon.png">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -20,11 +26,11 @@
 
         .controls { position: absolute; bottom: 20px; left: 0; width: 100%; display: flex; flex-direction: column; gap: 8px; padding: 0 12px; z-index: 1000; }
         .row { display: flex; justify-content: space-around; gap: 8px; }
-        button { background: #0ff; color: #000; border: none; height: 50px; flex: 1; font-weight: bold; border-radius: 8px; font-size: 13px; cursor: pointer; }
+        button { background: #0ff; color: #000; border: none; height: 50px; flex: 1; font-weight: bold; border-radius: 8px; font-size: 13px; cursor: pointer; transition: 0.2s; }
         .btn-sec { background: #1a1a1a; color: #0ff; border: 1px solid #0ff; }
         .btn-danger { background: #1a1a1a; color: #ff4444; border: 1px solid #ff4444; }
+        button:active { transform: scale(0.9); }
 
-        /* Estilo para los globos de precio */
         .gas-label { background: #0ff; color: #000; border-radius: 4px; padding: 2px 5px; font-weight: bold; border: 1px solid #000; font-size: 10px; }
     </style>
 </head>
@@ -78,46 +84,42 @@
             document.getElementById('status').innerText = "⛽ Buscando Plenoil...";
             gasMarkers.clearLayers();
             try {
-                // API Ministerio de Energía (Proxy CORS para que funcione en navegador)
                 const res = await fetch('https://sedeaplicaciones.minetur.gob.es/ServiciosRESTCarburantes/PreciosCarburantes/EstacionesTerrestres/');
                 const data = await res.json();
                 const pos = userMarker.getLatLng();
-                
                 const filtradas = data.ListaEESSPrecio.filter(g => 
                     g.Rotulo.includes("PLENOIL") && 
-                    map.distance([pos.lat, pos.lng], [g.Latitud.replace(',','.'), g['Longitud (WGS84)'].replace(',','.')]) < 10000 // 10km
+                    map.distance([pos.lat, pos.lng], [g.Latitud.replace(',','.'), g['Longitud (WGS84)'].replace(',','.')]) < 15000 
                 );
-
                 filtradas.forEach(g => {
                     const gLat = g.Latitud.replace(',','.');
                     const gLon = g['Longitud (WGS84)'].replace(',','.');
-                    const label = `G95: ${g['Precio Gasolina 95 E5']}€<br>GOA: ${g['Precio Gasoleo A']}€`;
-                    
                     L.marker([gLat, gLon], {
                         icon: L.divIcon({ className: 'gas-label', html: `⛽ ${g['Precio Gasoleo A']}€` })
-                    }).addTo(gasMarkers).bindPopup(`<b>${g.Rotulo}</b><br>${label}`);
+                    }).addTo(gasMarkers).bindPopup(`<b>${g.Rotulo}</b><br>G95: ${g['Precio Gasolina 95 E5']}€<br>GOA: ${g['Precio Gasoleo A']}€`);
                 });
-                
                 if(filtradas.length > 0) {
                     map.fitBounds(gasMarkers.getBounds());
                     document.getElementById('status').innerText = `✅ ${filtradas.length} Plenoil encontradas`;
-                } else {
-                    alert("No hay Plenoil a menos de 10km");
                 }
-            } catch (e) { document.getElementById('status').innerText = "❌ Error API Gasolina"; }
+            } catch (e) { document.getElementById('status').innerText = "❌ Error API"; }
         }
 
         async function getAddress(lat, lon, isCar) {
-            const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
-            const data = await res.json();
-            document.getElementById('address').innerText = (isCar ? "🚗 en " : "📍 en ") + (data.address.road || "S/N");
+            try {
+                const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
+                const data = await res.json();
+                document.getElementById('address').innerText = (isCar ? "🚗 en " : "📍 en ") + (data.address.road || "S/N");
+            } catch(e){}
         }
 
         async function updateWeather(lat, lon) {
-            const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&hourly=precipitation_probability`);
-            const data = await res.json();
-            const rain = data.hourly.precipitation_probability[0];
-            document.getElementById('weather-alert').innerText = `🌡️ ${data.current_weather.temperature}ºC` + (rain > 30 ? ` | ⚠️ LLUVIA: ${rain}%` : "");
+            try {
+                const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&hourly=precipitation_probability`);
+                const data = await res.json();
+                const rain = data.hourly.precipitation_probability[0];
+                document.getElementById('weather-alert').innerText = `🌡️ ${data.current_weather.temperature}ºC` + (rain > 30 ? ` | ⚠️ LLUVIA: ${rain}%` : "");
+            } catch(e){}
         }
 
         function setParking() {
