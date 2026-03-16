@@ -1,17 +1,16 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <title>IParking 2026</title>
+    <title>IParking v3</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        * { box-sizing: border-box; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
         body { 
-            background: #0b110b; 
-            color: #00ff00; 
-            font-family: monospace; 
-            margin: 0; 
+            background: #000; 
+            color: #0ff; 
+            font-family: sans-serif; 
             display: flex; 
             flex-direction: column; 
             height: 100vh; 
@@ -19,43 +18,41 @@
             overflow: hidden; 
         }
         #weather { 
-            height: 50px; 
-            line-height: 50px; 
-            background: #1a2a1a; 
+            height: 40px; 
+            line-height: 40px; 
+            background: #111; 
             text-align: center; 
-            border-bottom: 2px solid #00ff00; 
-            font-size: 14px; 
-            z-index: 2000;
+            border-bottom: 1px solid #0ff; 
+            font-size: 12px;
+            font-weight: bold;
         }
         #map { 
             flex: 1; 
             width: 100%; 
-            z-index: 1;
         }
         .controls { 
-            height: 100px; 
+            height: 70px; 
             display: flex; 
             justify-content: space-around; 
             align-items: center; 
-            background: #0b110b; 
-            border-top: 2px solid #00ff00; 
-            padding: 10px;
-            z-index: 2000;
+            background: #000; 
+            border-top: 1px solid #0ff;
+            padding: 5px;
         }
         button { 
-            background: #00ff00; 
+            background: #0ff; 
             color: #000; 
             border: none; 
-            height: 60px; 
-            width: 45%; 
+            height: 50px; 
+            width: 46%; 
             font-weight: bold; 
-            border-radius: 10px; 
-            font-size: 16px;
+            border-radius: 5px; 
+            font-size: 14px;
         }
     </style>
 </head>
 <body>
-    <div id="weather">🛰️ Localizando...</div>
+    <div id="weather">CONECTANDO GPS...</div>
     <div id="map"></div>
     <div class="controls">
         <button onclick="setParking()">🅿️ APARCAR</button>
@@ -65,33 +62,30 @@
     <script>
         let map = L.map('map', { zoomControl: false }).setView([38.70, -0.47], 16);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-        let userMarker = L.circleMarker([0,0], {color: '#00ff00', fillColor: '#00ff00', fillOpacity: 0.9, radius: 10}).addTo(map);
+        let userMarker = L.circleMarker([0,0], {color: '#0ff', radius: 8}).addTo(map);
         let carMarker = null;
-        const savedPos = JSON.parse(localStorage.getItem('carPos_v2'));
-        if (savedPos) { carMarker = L.marker([savedPos.lat, savedPos.lng]).addTo(map).bindPopup("MI COCHE").openPopup(); }
+
+        const savedPos = JSON.parse(localStorage.getItem('carPos_v3'));
+        if (savedPos) { carMarker = L.marker([savedPos.lat, savedPos.lng]).addTo(map); }
+
         navigator.geolocation.watchPosition(pos => {
             const {latitude, longitude} = pos.coords;
             userMarker.setLatLng([latitude, longitude]);
             if (!carMarker) map.panTo([latitude, longitude]);
-            updateWeather(latitude, longitude);
+            document.getElementById('weather').innerText = `📍 GPS ACTIVO | ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
         }, null, { enableHighAccuracy: true });
+
         function setParking() {
             const coords = userMarker.getLatLng();
             if (carMarker) map.removeLayer(carMarker);
-            carMarker = L.marker(coords).addTo(map).bindPopup("APARCADO").openPopup();
-            localStorage.setItem('carPos_v2', JSON.stringify(coords));
+            carMarker = L.marker(coords).addTo(map);
+            localStorage.setItem('carPos_v3', JSON.stringify(coords));
+            alert("Posición guardada");
         }
         function clearParking() {
             if (carMarker) map.removeLayer(carMarker);
-            localStorage.removeItem('carPos_v2');
+            localStorage.removeItem('carPos_v3');
             carMarker = null;
-        }
-        async function updateWeather(lat, lon) {
-            try {
-                const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`);
-                const data = await res.json();
-                document.getElementById('weather').innerText = `🌡️ ${data.current_weather.temperature}ºC | 📍 GPS OK`;
-            } catch (e) { }
         }
     </script>
 </body>
