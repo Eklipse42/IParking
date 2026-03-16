@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Bunker Parking 2026</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        body { background: #0b110b; color: #00ff00; font-family: 'Courier New', monospace; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        #weather { padding: 12px; background: #1a2a1a; font-size: 14px; text-align: center; border-bottom: 2px solid #00ff00; box-shadow: 0 4px 10px black; z-index: 1000; }
+        #map { flex-grow: 1; width: 100%; }
+        .controls { padding: 20px; display: flex; justify-content: space-around; background: #0b110b; border-top: 2px solid #00ff00; }
+        button { background: #00ff00; color: #000; border: none; padding: 15px 25px; font-weight: bold; border-radius: 8px; cursor: pointer; text-transform: uppercase; box-shadow: 0 0 15px rgba(0,255,0,0.3); }
+        button:active { transform: scale(0.95); background: #00cc00; }
+    </style>
+</head>
+<body>
+    <div id="weather">🛰️ Sincronizando satélites GPS...</div>
+    <div id="map"></div>
+    <div class="controls">
+        <button onclick="setParking()">🅿️ APARCAR</button>
+        <button onclick="clearParking()">🗑️ BORRAR</button>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        let map = L.map('map', { zoomControl: false }).setView([38.70, -0.47], 15);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+        let userMarker = L.circleMarker([0,0], {color: '#00ff00', fillColor: '#00ff00', fillOpacity: 0.9, radius: 10}).addTo(map);
+        let carMarker = null;
+
+        const savedPos = JSON.parse(localStorage.getItem('carPos_bunker'));
+        if (savedPos) {
+            carMarker = L.marker([savedPos.lat, savedPos.lng]).addTo(map).bindPopup("COCHE AQUÍ").openPopup();
+        }
+
+        navigator.geolocation.watchPosition(pos => {
+            const {latitude, longitude} = pos.coords;
+            userMarker.setLatLng([latitude, longitude]);
+            if (!carMarker) map.panTo([latitude, longitude]);
+            updateWeather(latitude, longitude);
+        }, err => {
+            document.getElementById('weather').innerText = "❌ ACTIVA EL GPS EN TU MÓVIL";
+        }, { enableHighAccuracy: true });
+
+        function setParking() {
+            const coords = userMarker.getLatLng();
+            if (carMarker) map.removeLayer(carMarker);
+            carMarker = L.marker(coords).addTo(map).bindPopup("APARCADO").openPopup();
+            localStorage.setItem('carPos_bunker', JSON.stringify(coords));
+        }
+
+        function clearParking() {
+            if (carMarker) map.removeLayer(carMarker);
+            localStorage.removeItem('carPos_bunker');
+            carMarker = null;
+        }
+
+        async function updateWeather(lat, lon) {
+            try {
+                const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`);
+                const data = await res.json();
+                const t = data.current_weather.temperature;
+                document.getElementById('weather').innerText = `🌡️ ${t}ºC | 📍 ALTA PRECISIÓN GPS OK`;
+            } catch (e) { console.error(e); }
+        }
+    </script>
+</body>
+</html>
