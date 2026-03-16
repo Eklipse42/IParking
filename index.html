@@ -1,47 +1,47 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <title>IParking Pro 2026</title>
+    <title>IParking Premium</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body, html { height: 100%; width: 100%; overflow: hidden; background: #000; font-family: sans-serif; }
-        
         #map { position: absolute; top: 0; bottom: 0; width: 100%; z-index: 1; }
 
-        /* Panel Superior Info */
         #info-panel { 
             position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.85); color: #0ff; padding: 10px 15px;
+            background: rgba(0, 0, 0, 0.9); color: #0ff; padding: 12px;
             border-radius: 15px; border: 1px solid #0ff; font-family: monospace;
-            font-size: 12px; z-index: 1000; text-align: center; min-width: 200px;
+            font-size: 12px; z-index: 1000; text-align: center; min-width: 250px;
+            box-shadow: 0 0 15px rgba(0,255,0,0.2);
         }
 
-        /* Botones Flotantes Inferiores */
         .controls { 
-            position: absolute; bottom: 25px; left: 0; width: 100%;
-            display: flex; flex-direction: column; gap: 10px; padding: 0 15px; z-index: 1000;
+            position: absolute; bottom: 20px; left: 0; width: 100%;
+            display: flex; flex-direction: column; gap: 8px; padding: 0 12px; z-index: 1000;
         }
-        .row { display: flex; justify-content: space-around; gap: 10px; }
+        .row { display: flex; justify-content: space-around; gap: 8px; }
 
         button { 
-            background: #0ff; color: #000; border: none; height: 50px; flex: 1;
-            font-weight: bold; border-radius: 10px; font-size: 14px;
+            background: #0ff; color: #000; border: none; height: 55px; flex: 1;
+            font-weight: bold; border-radius: 12px; font-size: 13px;
             box-shadow: 0 4px 10px rgba(0,0,0,0.5); cursor: pointer;
+            display: flex; align-items: center; justify-content: center; gap: 5px;
         }
         
-        .btn-sec { background: #222; color: #0ff; border: 1px solid #0ff; }
-        button:active { transform: scale(0.95); opacity: 0.8; }
+        .btn-sec { background: #1a1a1a; color: #0ff; border: 1px solid #0ff; }
+        .btn-danger { background: #1a1a1a; color: #ff4444; border: 1px solid #ff4444; }
+        button:active { transform: scale(0.95); }
 
-        #note-display { color: #fff; font-size: 10px; margin-top: 5px; display: none; }
+        #note-display { color: #fff; font-size: 11px; margin-top: 5px; border-top: 1px dotted #0ff; padding-top: 5px; display: none; }
     </style>
 </head>
 <body>
     <div id="info-panel">
-        <div id="status">🛰️ BUSCANDO GPS...</div>
-        <div id="distance">Distancia: -- m</div>
+        <div id="status">🛰️ SISTEMA ONLINE</div>
+        <div id="distance">Distancia al coche: -- m</div>
         <div id="note-display"></div>
     </div>
 
@@ -50,11 +50,14 @@
     <div class="controls">
         <div class="row">
             <button onclick="setParking()">🅿️ APARCAR</button>
-            <button class="btn-sec" onclick="addNote()">📝 NOTA</button>
+            <button class="btn-sec" onclick="openCamera()">📸 FOTO</button>
         </div>
         <div class="row">
-            <button class="btn-sec" onclick="findFuel()">⛽ GASOLINA</button>
-            <button class="btn-sec" style="color:#ff4444; border-color:#ff4444;" onclick="clearParking()">🗑️ BORRAR</button>
+            <button class="btn-sec" onclick="addNote()">📝 NOTA PLAZA</button>
+            <button class="btn-sec" onclick="findPlenergy()">⛽ PLENOIL</button>
+        </div>
+        <div class="row">
+            <button class="btn-danger" onclick="clearParking()">🗑️ BORRAR TODO</button>
         </div>
     </div>
 
@@ -67,74 +70,69 @@
         let carMarker = null;
         let routeLine = null;
 
-        // Cargar datos guardados
-        const savedPos = JSON.parse(localStorage.getItem('bunker_v5_pos'));
-        const savedNote = localStorage.getItem('bunker_v5_note');
+        const savedPos = JSON.parse(localStorage.getItem('bunker_v6_pos'));
+        const savedNote = localStorage.getItem('bunker_v6_note');
         
-        if (savedPos) { 
-            drawCar(savedPos);
-            if(savedNote) showNote(savedNote);
-        }
+        if (savedPos) { drawCar(savedPos); if(savedNote) showNote(savedNote); }
 
         navigator.geolocation.watchPosition(pos => {
             const {latitude, longitude} = pos.coords;
-            const userLatLng = [latitude, longitude];
-            userMarker.setLatLng(userLatLng);
-            
-            if (!carMarker) map.panTo(userLatLng);
-            
+            userMarker.setLatLng([latitude, longitude]);
+            if (!carMarker) map.panTo([latitude, longitude]);
             updateDashboard(latitude, longitude);
         }, null, { enableHighAccuracy: true });
 
         function updateDashboard(lat, lon) {
             document.getElementById('status').innerText = `📍 GPS: ${lat.toFixed(4)}, ${lon.toFixed(4)}`;
-            
             if (carMarker) {
-                const carLatLng = carMarker.getLatLng();
-                const dist = map.distance([lat, lon], carLatLng);
+                const dist = map.distance([lat, lon], carMarker.getLatLng());
                 document.getElementById('distance').innerText = `Distancia: ${Math.round(dist)} metros`;
-                
-                // Dibujar línea de guía
                 if (routeLine) map.removeLayer(routeLine);
-                routeLine = L.polyline([[lat, lon], carLatLng], {color: '#0ff', weight: 2, dashArray: '5, 10'}).addTo(map);
+                routeLine = L.polyline([[lat, lon], carMarker.getLatLng()], {color: '#0ff', weight: 2, dashArray: '5, 10'}).addTo(map);
             }
         }
 
         function drawCar(coords) {
             if (carMarker) map.removeLayer(carMarker);
-            carMarker = L.marker(coords).addTo(map).bindPopup("MI COCHE");
+            carMarker = L.marker(coords).addTo(map);
         }
 
         function setParking() {
             const coords = userMarker.getLatLng();
             drawCar(coords);
-            localStorage.setItem('bunker_v5_pos', JSON.stringify(coords));
+            localStorage.setItem('bunker_v6_pos', JSON.stringify(coords));
+        }
+
+        function openCamera() {
+            // Esto abre la cámara del móvil directamente
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/*';
+            input.capture = 'environment';
+            input.click();
         }
 
         function addNote() {
-            const note = prompt("Ej: Planta 2, Plaza 14");
-            if (note) {
-                localStorage.setItem('bunker_v5_note', note);
-                showNote(note);
-            }
+            const note = prompt("Escribe planta o número de plaza:");
+            if (note) { localStorage.setItem('bunker_v6_note', note); showNote(note); }
         }
 
         function showNote(text) {
             const div = document.getElementById('note-display');
-            div.innerText = "NOTA: " + text;
+            div.innerText = "📌 " + text;
             div.style.display = 'block';
         }
 
-        function findFuel() {
+        function findPlenergy() {
             const pos = userMarker.getLatLng();
-            window.open(`https://www.google.com/maps/search/gasolinera+barata/@${pos.lat},${pos.lng},14z`);
+            // Busca específicamente gasolineras Plenoil alrededor de tu posición
+            window.open(`https://www.google.com/maps/search/Plenoil/@${pos.lat},${pos.lng},14z`);
         }
 
         function clearParking() {
             if (carMarker) map.removeLayer(carMarker);
             if (routeLine) map.removeLayer(routeLine);
-            localStorage.removeItem('bunker_v5_pos');
-            localStorage.removeItem('bunker_v5_note');
+            localStorage.clear();
             document.getElementById('distance').innerText = "Distancia: -- m";
             document.getElementById('note-display').style.display = 'none';
             carMarker = null;
