@@ -1,17 +1,15 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <title>IParking Búnker v7</title>
+    <title>IParking Búnker v8</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body, html { height: 100%; width: 100%; overflow: hidden; background: #111; font-family: 'Segoe UI', sans-serif; }
-        
-        /* Mapa con filtro oscuro */
         #map { position: absolute; top: 0; bottom: 0; width: 100%; z-index: 1; filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%); }
-
+        
         #info-panel { 
             position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
             background: rgba(0, 20, 20, 0.95); color: #0ff; padding: 12px;
@@ -20,35 +18,23 @@
             box-shadow: 0 0 20px rgba(0,255,255,0.3);
         }
 
-        .controls { 
-            position: absolute; bottom: 20px; left: 0; width: 100%;
-            display: flex; flex-direction: column; gap: 8px; padding: 0 12px; z-index: 1000;
-        }
+        .controls { position: absolute; bottom: 20px; left: 0; width: 100%; display: flex; flex-direction: column; gap: 8px; padding: 0 12px; z-index: 1000; }
         .row { display: flex; justify-content: space-around; gap: 8px; }
-
-        button { 
-            background: #0ff; color: #000; border: none; height: 50px; flex: 1;
-            font-weight: bold; border-radius: 8px; font-size: 13px;
-            cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px;
-        }
-        
+        button { background: #0ff; color: #000; border: none; height: 50px; flex: 1; font-weight: bold; border-radius: 8px; font-size: 13px; cursor: pointer; }
         .btn-sec { background: #1a1a1a; color: #0ff; border: 1px solid #0ff; }
         .btn-danger { background: #1a1a1a; color: #ff4444; border: 1px solid #ff4444; }
-        button:active { transform: scale(0.92); }
 
-        #address { font-weight: bold; color: #fff; margin-bottom: 4px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        #weather-alert { color: #ffcc00; font-size: 10px; margin-top: 4px; font-weight: bold; }
+        /* Estilo para los globos de precio */
+        .gas-label { background: #0ff; color: #000; border-radius: 4px; padding: 2px 5px; font-weight: bold; border: 1px solid #000; font-size: 10px; }
     </style>
 </head>
 <body>
     <div id="info-panel">
-        <div id="address">📍 Localizando calle...</div>
+        <div id="address">📍 Localizando...</div>
         <div id="status">🛰️ GPS OK | <span id="dist-val">-- m</span></div>
-        <div id="weather-alert">Cargando clima...</div>
+        <div id="weather-alert">...</div>
     </div>
-
     <div id="map"></div>
-
     <div class="controls">
         <div class="row">
             <button onclick="setParking()">🅿️ APARCAR</button>
@@ -58,31 +44,23 @@
             <button class="btn-sec" onclick="addNote()">📝 NOTA</button>
             <button class="btn-sec" onclick="findPlenoil()">⛽ PLENOIL</button>
         </div>
-        <div class="row">
-            <button class="btn-danger" onclick="clearParking()">🗑️ BORRAR</button>
-        </div>
+        <div class="row"><button class="btn-danger" onclick="clearParking()">🗑️ BORRAR</button></div>
     </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
         let map = L.map('map', { zoomControl: false }).setView([38.70, -0.47], 17);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-        
-        let userMarker = L.circleMarker([0,0], {color: '#0ff', fillColor: '#0ff', fillOpacity: 0.9, radius: 7}).addTo(map);
-        let carMarker = null;
-        let routeLine = null;
+        let userMarker = L.circleMarker([0,0], {color: '#0ff', radius: 7, fillOpacity: 0.9}).addTo(map);
+        let carMarker = null, routeLine = null, gasMarkers = L.layerGroup().addTo(map);
 
         const savedPos = JSON.parse(localStorage.getItem('v7_pos'));
-        if (savedPos) { 
-            carMarker = L.marker(savedPos).addTo(map);
-            getAddress(savedPos.lat, savedPos.lng, true);
-        }
+        if (savedPos) { carMarker = L.marker(savedPos).addTo(map); getAddress(savedPos.lat, savedPos.lng, true); }
 
         navigator.geolocation.watchPosition(pos => {
             const {latitude, longitude} = pos.coords;
             userMarker.setLatLng([latitude, longitude]);
             if (!carMarker) map.panTo([latitude, longitude]);
-            
             updateDashboard(latitude, longitude);
         }, null, { enableHighAccuracy: true });
 
@@ -91,31 +69,55 @@
                 const dist = map.distance([lat, lon], carMarker.getLatLng());
                 document.getElementById('dist-val').innerText = `${Math.round(dist)}m al coche`;
                 if (routeLine) map.removeLayer(routeLine);
-                routeLine = L.polyline([[lat, lon], carMarker.getLatLng()], {color: '#0ff', weight: 2, dashArray: '5, 10'}).addTo(map);
+                routeLine = L.polyline([[lat, lon], carMarker.getLatLng()], {color: '#0ff', weight: 2, dashArray: '5,10'}).addTo(map);
             }
-            // Clima y Avisos
             updateWeather(lat, lon);
         }
 
-        async function getAddress(lat, lon, isCar) {
+        async function findPlenoil() {
+            document.getElementById('status').innerText = "⛽ Buscando Plenoil...";
+            gasMarkers.clearLayers();
             try {
-                const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
+                // API Ministerio de Energía (Proxy CORS para que funcione en navegador)
+                const res = await fetch('https://sedeaplicaciones.minetur.gob.es/ServiciosRESTCarburantes/PreciosCarburantes/EstacionesTerrestres/');
                 const data = await res.json();
-                const street = data.address.road || "Calle desconocida";
-                document.getElementById('address').innerText = isCar ? `🚗 en ${street}` : `📍 en ${street}`;
-            } catch (e) { }
+                const pos = userMarker.getLatLng();
+                
+                const filtradas = data.ListaEESSPrecio.filter(g => 
+                    g.Rotulo.includes("PLENOIL") && 
+                    map.distance([pos.lat, pos.lng], [g.Latitud.replace(',','.'), g['Longitud (WGS84)'].replace(',','.')]) < 10000 // 10km
+                );
+
+                filtradas.forEach(g => {
+                    const gLat = g.Latitud.replace(',','.');
+                    const gLon = g['Longitud (WGS84)'].replace(',','.');
+                    const label = `G95: ${g['Precio Gasolina 95 E5']}€<br>GOA: ${g['Precio Gasoleo A']}€`;
+                    
+                    L.marker([gLat, gLon], {
+                        icon: L.divIcon({ className: 'gas-label', html: `⛽ ${g['Precio Gasoleo A']}€` })
+                    }).addTo(gasMarkers).bindPopup(`<b>${g.Rotulo}</b><br>${label}`);
+                });
+                
+                if(filtradas.length > 0) {
+                    map.fitBounds(gasMarkers.getBounds());
+                    document.getElementById('status').innerText = `✅ ${filtradas.length} Plenoil encontradas`;
+                } else {
+                    alert("No hay Plenoil a menos de 10km");
+                }
+            } catch (e) { document.getElementById('status').innerText = "❌ Error API Gasolina"; }
+        }
+
+        async function getAddress(lat, lon, isCar) {
+            const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
+            const data = await res.json();
+            document.getElementById('address').innerText = (isCar ? "🚗 en " : "📍 en ") + (data.address.road || "S/N");
         }
 
         async function updateWeather(lat, lon) {
-            try {
-                const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&hourly=precipitation_probability`);
-                const data = await res.json();
-                const temp = data.current_weather.temperature;
-                const rainProb = data.hourly.precipitation_probability[0];
-                let alertMsg = `🌡️ ${temp}ºC`;
-                if(rainProb > 30) alertMsg += ` | ⚠️ LLUVIA: ${rainProb}%`;
-                document.getElementById('weather-alert').innerText = alertMsg;
-            } catch (e) { }
+            const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&hourly=precipitation_probability`);
+            const data = await res.json();
+            const rain = data.hourly.precipitation_probability[0];
+            document.getElementById('weather-alert').innerText = `🌡️ ${data.current_weather.temperature}ºC` + (rain > 30 ? ` | ⚠️ LLUVIA: ${rain}%` : "");
         }
 
         function setParking() {
@@ -126,28 +128,9 @@
             getAddress(coords.lat, coords.lng, true);
         }
 
-        function findPlenoil() {
-            const pos = userMarker.getLatLng();
-            window.open(`https://www.google.com/maps/search/Plenoil/@${pos.lat},${pos.lng},14z`);
-        }
-
-        function openCamera() {
-            const input = document.createElement('input');
-            input.type = 'file'; input.accept = 'image/*'; input.capture = 'environment';
-            input.click();
-        }
-
-        function addNote() {
-            const note = prompt("Nota de plaza:");
-            if (note) document.getElementById('status').innerText = "📝 " + note;
-        }
-
-        function clearParking() {
-            if (carMarker) map.removeLayer(carMarker);
-            if (routeLine) map.removeLayer(routeLine);
-            localStorage.clear();
-            location.reload();
-        }
+        function openCamera() { const i = document.createElement('input'); i.type = 'file'; i.accept = 'image/*'; i.capture = 'environment'; i.click(); }
+        function addNote() { const n = prompt("Nota:"); if (n) document.getElementById('status').innerText = "📝 " + n; }
+        function clearParking() { localStorage.clear(); location.reload(); }
     </script>
 </body>
 </html>
