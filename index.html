@@ -67,4 +67,56 @@
         }
 
         navigator.geolocation.watchPosition(pos => {
-            const {latitude, longitude} =
+            const {latitude, longitude} = pos.coords;
+            userMarker.setLatLng([latitude, longitude]);
+            if (!carMarker) map.panTo([latitude, longitude]);
+            updateDashboard(latitude, longitude);
+        }, null, { enableHighAccuracy: true });
+
+        async function updateDashboard(lat, lon) {
+            if (carMarker) {
+                const dist = map.distance([lat, lon], carMarker.getLatLng());
+                document.getElementById('dist-val').innerText = `${Math.round(dist)}m al coche`;
+                if (routeLine) map.removeLayer(routeLine);
+                routeLine = L.polyline([[lat, lon], carMarker.getLatLng()], {color: '#0ff', weight: 2, dashArray: '5,10'}).addTo(map);
+            }
+            updateWeather(lat, lon);
+        }
+
+        function findPlenoil() {
+            const pos = userMarker.getLatLng();
+            // Corregido: Búsqueda limpia en Google Maps
+            window.open(`https://www.google.com/maps/search/Plenoil/@${pos.lat},${pos.lng},14z`, '_blank');
+        }
+
+        async function getAddress(lat, lon, isCar) {
+            try {
+                const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
+                const data = await res.json();
+                document.getElementById('address').innerText = (isCar ? "🚗 en " : "📍 en ") + (data.address.road || "S/N");
+            } catch(e){}
+        }
+
+        async function updateWeather(lat, lon) {
+            try {
+                const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&hourly=precipitation_probability`);
+                const data = await res.json();
+                const rain = data.hourly.precipitation_probability[0];
+                document.getElementById('weather-alert').innerText = `🌡️ ${data.current_weather.temperature}ºC` + (rain > 30 ? ` | ⚠️ LLUVIA: ${rain}%` : "");
+            } catch(e){}
+        }
+
+        function setParking() {
+            const coords = userMarker.getLatLng();
+            if (carMarker) map.removeLayer(carMarker);
+            carMarker = L.marker(coords).addTo(map);
+            localStorage.setItem('v7_pos', JSON.stringify(coords));
+            getAddress(coords.lat, coords.lng, true);
+        }
+
+        function openCamera() { const i = document.createElement('input'); i.type = 'file'; i.accept = 'image/*'; i.capture = 'environment'; i.click(); }
+        function addNote() { const n = prompt("Nota:"); if (n) document.getElementById('status').innerText = "📝 " + n; }
+        function clearParking() { localStorage.clear(); location.reload(); }
+    </script>
+</body>
+</html>
